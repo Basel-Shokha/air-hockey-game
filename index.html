@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Air Hockey Demo</title>
+    <style>
+        canvas { background: #222; display: block; margin: auto; border: 5px solid #555; }
+        body { background: #111; color: white; text-align: center; font-family: sans-serif; }
+    </style>
+</head>
+<body>
+    <h1>Air Hockey - Basel Edition</h1>
+    <canvas id="hockeyBoard" width="400" height="600"></canvas>
+
+    <script>
+        const canvas = document.getElementById('hockeyBoard');
+        const ctx = canvas.getContext('2d');
+
+        let ball = { x: 200, y: 300, dx: 4, dy: 4, radius: 15 };
+        let player = { x: 200, y: 550, radius: 25 };
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // رسم الكرة
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
+            ctx.fillStyle = "cyan";
+            ctx.fill();
+            ctx.closePath();
+
+            // رسم اللاعب (أنت)
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2);
+            ctx.fillStyle = "white";
+            ctx.fill();
+            ctx.closePath();
+
+            // منطق حركة الكرة (Physics)
+            ball.x += ball.dx;
+            ball.y += ball.dy;
+
+            if(ball.x + ball.radius > canvas.width || ball.x - ball.radius < 0) ball.dx *= -1;
+            if(ball.y - ball.radius < 0) ball.dy *= -1; // ارتداد من جهة الخصم
+            
+            // في حال سجلت هدف (تخيل الأحمر يضوي هون)
+            if(ball.y > canvas.height) {
+                alert("Goal! Red LED ON");
+                ball.x = 200; ball.y = 300;
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        // تحكم التلفون (Touch)
+        canvas.addEventListener('touchmove', (e) => {
+            let touch = e.touches[0];
+            let rect = canvas.getBoundingClientRect();
+            player.x = touch.clientX - rect.left;
+            player.y = touch.clientY - rect.top;
+        });
+
+        draw();
+    </script>
+</body>
+</html>
