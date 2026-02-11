@@ -1,185 +1,171 @@
 <!DOCTYPE html>
-<html lang="ar">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Basel Hockey - Ultimate Edition</title>
+    <title>IoT Preview - Air Hockey</title>
     <style>
-        :root { --bg-color: #1a1a1a; --primary: #00f2ff; }
-        body { margin: 0; background: var(--bg-color); color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; touch-action: none; }
+        :root { --primary: #00f2ff; --bg: #0a0a0a; }
+        body { margin: 0; background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; touch-action: none; }
         
-        /* شاشة البداية */
-        #menu { position: absolute; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); z-index: 10; padding: 20px; box-sizing: border-box; }
-        input, select, button { padding: 12px; margin: 10px; border-radius: 8px; border: none; width: 250px; font-size: 16px; }
-        button { background: var(--primary); color: black; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:hover { transform: scale(1.05); }
+        /* Setup Screen */
+        #setup-layer { 
+            position: absolute; width: 100%; height: 100%; 
+            background: linear-gradient(135deg, #1a1a1a, #000);
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            z-index: 100;
+        }
+        .form-container { 
+            background: rgba(255, 255, 255, 0.05); padding: 30px; 
+            border-radius: 15px; backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 242, 255, 0.3); text-align: center;
+        }
+        input, select, button { 
+            display: block; width: 100%; padding: 12px; margin: 15px 0; 
+            border-radius: 8px; border: 1px solid #444; background: #222; color: white;
+            font-size: 16px; box-sizing: border-box;
+        }
+        button { background: var(--primary); color: black; font-weight: bold; cursor: pointer; border: none; }
 
-        /* أجواء الخلفية حسب المزاج */
-        .mood-angry { background: linear-gradient(to bottom, #4a0000, #000) !important; }
-        .mood-calm { background: linear-gradient(to bottom, #001a4a, #000) !important; }
-        .mood-joker { background: linear-gradient(to bottom, #2a004a, #000) !important; }
+        /* Stats HUD */
+        #stats-hud { 
+            position: absolute; top: 20px; width: 100%; display: none; 
+            justify-content: space-around; font-size: 18px; z-index: 5;
+        }
 
-        canvas { display: none; margin: auto; border: 4px solid #444; }
-        #led-strip { position: absolute; top: 0; width: 100%; height: 10px; transition: 0.3s; }
+        canvas { display: none; margin: auto; border-bottom: 3px solid var(--primary); }
+        #led-indicator { position: absolute; top: 0; width: 100%; height: 10px; z-index: 20; }
     </style>
 </head>
 <body>
 
-    <div id="led-strip"></div>
+    <div id="led-indicator"></div>
 
-    <div id="menu">
-        <h1>Basel Air Hockey</h1>
-        <input type="text" id="userName" placeholder="دخل اسمك هون...">
-        
-        <label>المزاج (Mood):</label>
-        <select id="moodSelect" onchange="playMoodAudio()">
-            <option value="calm">هادي (Calm)</option>
-            <option value="angry">عصبي (Angry)</option>
-            <option value="joker">جوكر (Joker)</option>
-        </select>
+    <div id="setup-layer">
+        <div class="form-container">
+            <h1 style="color: var(--primary);">IoT Preview</h1>
+            <input type="text" id="pName" placeholder="Enter your name...">
+            
+            <label>AI Personality (Mood):</label>
+            <select id="mMood">
+                <option value="calm">Calm (Steady)</option>
+                <option value="angry">Angry (Fast/Aggressive)</option>
+                <option value="joker">Joker (Deceptive/Random)</option>
+            </select>
 
-        <label>الصعوبة (Difficulty):</label>
-        <select id="diffSelect">
-            <option value="1">هوين (Easy)</option>
-            <option value="2">ميديم (Medium)</option>
-            <option value="3">صعب (Hard)</option>
-        </select>
+            <label>Difficulty Level:</label>
+            <select id="mDiff">
+                <option value="1.5">Easy</option>
+                <option value="3">Medium</option>
+                <option value="6">Hard</option>
+            </select>
 
-        <button onclick="startGame()">إبدأ اللعبة!</button>
+            <button onclick="bootGame()">Initialize System</button>
+        </div>
     </div>
 
-    <canvas id="gameCanvas"></canvas>
+    <div id="stats-hud">
+        <div id="pLabel">Player: 0</div>
+        <div id="aiLabel">AI: 0</div>
+    </div>
+
+    <canvas id="game"></canvas>
 
     <script>
-        const canvas = document.getElementById('gameCanvas');
+        const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
-        const menu = document.getElementById('menu');
-        const led = document.getElementById('led-strip');
+        const setup = document.getElementById('setup-layer');
+        const hud = document.getElementById('stats-hud');
+        const led = document.getElementById('led-indicator');
 
-        let name, mood, diff;
-        let ball, player, ai;
-        let playerScore = 0, aiScore = 0;
+        let gameState = { player: "", scoreP: 0, scoreAI: 0, mood: "", difficulty: 1 };
+        let ball = { x: 0, y: 0, dx: 5, dy: 5, r: 12 };
+        let p1 = { x: 0, y: 0, r: 25 };
+        let ai = { x: 0, y: 0, r: 25 };
 
-        function playMoodAudio() {
-            const m = document.getElementById('moodSelect').value;
-            // ملاحظة: لازم ترفع ملفات صوتية وتسميها بنفس الأسماء
-            let audio = new Audio(`https://www.soundjay.com/buttons/sounds/button-3.mp3`); // مثال تجريبي
-            audio.play().catch(() => {}); // منع الخطأ إذا المتصفح عمل بلوك
-            
-            // تغيير لون الخلفية فورياً للمعاينة
-            menu.className = `mood-${m}`;
-        }
+        function bootGame() {
+            gameState.player = document.getElementById('pName').value || "User";
+            gameState.mood = document.getElementById('mMood').value;
+            gameState.difficulty = parseFloat(document.getElementById('mDiff').value);
 
-        function startGame() {
-            name = document.getElementById('userName').value || "لاعب مجهول";
-            mood = document.getElementById('moodSelect').value;
-            diff = parseInt(document.getElementById('diffSelect').value);
-
-            menu.style.display = 'none';
+            setup.style.display = 'none';
+            hud.style.display = 'flex';
             canvas.style.display = 'block';
-            resizeCanvas();
-            initGame();
+            
+            init();
             animate();
         }
 
-        function resizeCanvas() {
-            canvas.width = Math.min(window.innerWidth, 450);
-            canvas.height = window.innerHeight * 0.8;
+        function init() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            ball.x = canvas.width/2; ball.y = canvas.height/2;
+            p1.x = canvas.width/2; p1.y = canvas.height - 100;
+            ai.x = canvas.width/2; ai.y = 100;
+            updateHUD();
         }
 
-        function initGame() {
-            ball = { x: canvas.width/2, y: canvas.height/2, dx: 4, dy: 4, radius: 12 };
-            player = { x: canvas.width/2, y: canvas.height - 50, radius: 25 };
-            ai = { x: canvas.width/2, y: 50, radius: 25, speed: diff * 2.5 };
+        function updateHUD() {
+            document.getElementById('pLabel').innerText = `${gameState.player}: ${gameState.scoreP}`;
+            document.getElementById('aiLabel').innerText = `AI: ${gameState.scoreAI}`;
         }
 
         function animate() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // رسم الطاولة
-            ctx.strokeStyle = "#444";
-            ctx.setLineDash([5, 5]);
-            ctx.beginPath();
-            ctx.moveTo(0, canvas.height/2);
-            ctx.lineTo(canvas.width, canvas.height/2);
-            ctx.stroke();
+            ctx.fillStyle = "rgba(10, 10, 10, 0.2)"; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // رسم الكرة
-            ctx.beginPath();
-            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
-            ctx.fillStyle = mood === 'angry' ? "#ff0000" : (mood === 'joker' ? "#ff00ff" : "#00f2ff");
-            ctx.fill();
-            ctx.closePath();
+            ball.x += ball.dx; ball.y += ball.dy;
+            if(ball.x < 0 || ball.x > canvas.width) ball.dx *= -1;
 
-            // منطق AI - الجوكر (Deception Logic)
-            let targetX = ball.x;
-            if (mood === 'joker' && Math.random() < 0.05) {
-                targetX = Math.random() * canvas.width; // يخدعك ويروح جهة ثانية
-            }
-            
-            if (ai.x < targetX) ai.x += ai.speed;
-            else ai.x -= ai.speed;
+            // AI Logic
+            let target = ball.x;
+            if(gameState.mood === 'joker' && Math.random() < 0.1) target = Math.random() * canvas.width;
+            let speedFactor = gameState.mood === 'angry' ? 0.25 : 0.15;
+            ai.x += (target - ai.x) * speedFactor * (gameState.difficulty/2);
 
-            // فيزياء الكرة
-            ball.x += ball.dx;
-            ball.y += ball.dy;
+            // Collisions
+            if(Math.hypot(ball.x - p1.x, ball.y - p1.y) < ball.r + p1.r) ball.dy = -Math.abs(ball.dy) * 1.05;
+            if(Math.hypot(ball.x - ai.x, ball.y - ai.y) < ball.r + ai.r) ball.dy = Math.abs(ball.dy) * 1.05;
 
-            // اصطدام بالجدران
-            if(ball.x + ball.radius > canvas.width || ball.x - ball.radius < 0) ball.dx *= -1;
+            // Goal Detection
+            if(ball.y < 0) score('P');
+            if(ball.y > canvas.height) score('AI');
 
-            // تسجيل الأهداف
-            if(ball.y < 0) { // سجلت جول!
-                playerScore++;
-                triggerLED("blue");
-                resetBall();
-            } else if(ball.y > canvas.height) { // سجل فيك!
-                aiScore++;
-                triggerLED("red");
-                resetBall();
-            }
-
-            // اصطدام مع المضرب (بسيط)
-            let dist = Math.hypot(ball.x - player.x, ball.y - player.y);
-            if(dist < ball.radius + player.radius) ball.dy *= -1.1;
-
-            let aiDist = Math.hypot(ball.x - ai.x, ball.y - ai.y);
-            if(aiDist < ball.radius + ai.radius) ball.dy *= -1.1;
-
-            // رسم اللاعبين
-            drawCircle(player.x, player.y, player.radius, "white");
-            drawCircle(ai.x, ai.y, ai.radius, "orange");
-
+            draw();
             requestAnimationFrame(animate);
         }
 
-        function drawCircle(x, y, r, color) {
-            ctx.beginPath();
-            ctx.arc(x, y, r, 0, Math.PI*2);
-            ctx.fillStyle = color;
-            ctx.fill();
-            ctx.closePath();
-        }
-
-        function resetBall() {
-            ball.x = canvas.width/2;
-            ball.y = canvas.height/2;
-            ball.dy *= -1;
+        function score(who) {
+            if(who === 'P') { gameState.scoreP++; triggerLED("cyan"); }
+            else { gameState.scoreAI++; triggerLED("red"); }
+            updateHUD();
+            ball.x = canvas.width/2; ball.y = canvas.height/2;
+            ball.dy = who === 'P' ? 5 : -5;
         }
 
         function triggerLED(color) {
-            led.style.backgroundColor = color;
-            setTimeout(() => led.style.backgroundColor = "transparent", 500);
+            led.style.background = color;
+            setTimeout(() => led.style.background = "transparent", 400);
         }
 
-        // تحكم التلفون
-        window.addEventListener('touchmove', (e) => {
-            let touch = e.touches[0];
-            let rect = canvas.getBoundingClientRect();
-            player.x = touch.clientX - rect.left;
-            // حماية اللاعب من تخطي خط المنتصف
-            player.y = Math.max(canvas.height/2 + player.radius, touch.clientY - rect.top);
-        });
+        function draw() {
+            ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2);
+            ctx.fillStyle = "white"; ctx.fill(); ctx.closePath();
 
+            drawPaddle(p1.x, p1.y, "cyan");
+            drawPaddle(ai.x, ai.y, "orange");
+        }
+
+        function drawPaddle(x, y, col) {
+            ctx.beginPath(); ctx.arc(x, y, 25, 0, Math.PI*2);
+            ctx.fillStyle = col; ctx.fill(); ctx.closePath();
+        }
+
+        window.addEventListener('touchmove', e => {
+            let t = e.touches[0];
+            p1.x = t.clientX;
+            p1.y = Math.max(canvas.height/2 + 50, t.clientY);
+        });
     </script>
 </body>
 </html>
