@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IoT Preview - Air Hockey</title>
+    <title>IoT Air Hockey - Connected</title>
     <style>
-        :root { --primary: #00f2ff; --bg: #0a0a0a; }
+        :root { --primary: #00f2ff; --bg: #0a0a0a; --danger: #ff004c; }
         body { margin: 0; background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; touch-action: none; }
         
         /* Setup Screen */
@@ -19,79 +19,137 @@
             background: rgba(255, 255, 255, 0.05); padding: 30px; 
             border-radius: 15px; backdrop-filter: blur(10px);
             border: 1px solid rgba(0, 242, 255, 0.3); text-align: center;
+            width: 80%; max-width: 400px;
         }
         input, select, button { 
             display: block; width: 100%; padding: 12px; margin: 15px 0; 
             border-radius: 8px; border: 1px solid #444; background: #222; color: white;
             font-size: 16px; box-sizing: border-box;
         }
-        button { background: var(--primary); color: black; font-weight: bold; cursor: pointer; border: none; }
+        button { background: var(--primary); color: black; font-weight: bold; cursor: pointer; border: none; text-transform: uppercase; letter-spacing: 1px; }
+        button:active { transform: scale(0.98); }
 
         /* Stats HUD */
         #stats-hud { 
             position: absolute; top: 20px; width: 100%; display: none; 
             justify-content: space-around; font-size: 18px; z-index: 5;
+            font-weight: bold; text-shadow: 0 0 10px black;
         }
 
         canvas { display: none; margin: auto; border-bottom: 3px solid var(--primary); }
-        #led-indicator { position: absolute; top: 0; width: 100%; height: 10px; z-index: 20; }
+        #led-indicator { position: absolute; top: 0; width: 100%; height: 8px; z-index: 20; transition: background 0.2s; }
+        
+        /* Hidden YouTube Player */
+        #yt-player { position: absolute; top: -9999px; left: -9999px; }
     </style>
 </head>
 <body>
 
     <div id="led-indicator"></div>
+    <div id="yt-player"></div>
 
     <div id="setup-layer">
         <div class="form-container">
-            <h1 style="color: var(--primary);">IoT Preview</h1>
-            <input type="text" id="pName" placeholder="Enter your name...">
+            <h1 style="color: var(--primary);">SYSTEM LOGIN</h1>
+            <input type="text" id="pName" placeholder="Enter Player ID...">
             
-            <label>AI Personality (Mood):</label>
+            <label>Tactical Profile (Mood):</label>
             <select id="mMood">
-                <option value="calm">Calm (Steady)</option>
-                <option value="angry">Angry (Fast/Aggressive)</option>
-                <option value="joker">Joker (Deceptive/Random)</option>
+                <option value="calm">Defensive (Calm)</option>
+                <option value="aggressive">Aggressive (Angry)</option>
+                <option value="joker">The Joker (Tricky)</option>
             </select>
 
-            <label>Difficulty Level:</label>
+            <label>Motor Difficulty:</label>
             <select id="mDiff">
-                <option value="1.5">Easy</option>
-                <option value="3">Medium</option>
-                <option value="6">Hard</option>
+                <option value="1">Rookie</option>
+                <option value="3">Pro</option>
+                <option value="5">God Mode</option>
             </select>
 
-            <button onclick="bootGame()">Initialize System</button>
+            <button onclick="bootGame()">CONNECT TO TABLE</button>
+            <p style="font-size: 12px; color: #666;">*Audio requires interaction</p>
         </div>
     </div>
 
     <div id="stats-hud">
-        <div id="pLabel">Player: 0</div>
-        <div id="aiLabel">AI: 0</div>
+        <div id="pLabel" style="color: var(--primary)">Player: 0</div>
+        <div id="aiLabel" style="color: var(--danger)">AI: 0</div>
     </div>
 
     <canvas id="game"></canvas>
 
+    <script src="https://www.youtube.com/iframe_api"></script>
+
     <script>
+        // --- 1. AUDIO SYSTEM (YouTube + Text-to-Speech) ---
+        var player;
+        const YOUTUBE_ID = 'B3I8XPQHWig'; // The song you chose
+
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('yt-player', {
+                height: '0', width: '0',
+                videoId: YOUTUBE_ID,
+                playerVars: { 'playsinline': 1, 'loop': 1, 'playlist': YOUTUBE_ID, 'controls': 0 },
+                events: { 'onReady': onPlayerReady }
+            });
+        }
+
+        function onPlayerReady(event) {
+            console.log("Music Ready");
+            // Cannot play here yet - must wait for button click
+        }
+
+        function speak(text) {
+            if (!window.speechSynthesis) return;
+            const utter = new SpeechSynthesisUtterance(text);
+            
+            // Adjust voice based on mood
+            if (gameState.mood === 'joker') {
+                utter.pitch = 1.5; utter.rate = 1.2; // High pitched & fast
+            } else if (gameState.mood === 'aggressive') {
+                utter.pitch = 0.6; utter.rate = 1.0; // Deep & scary
+            } else {
+                utter.pitch = 1.0; utter.rate = 1.0; // Normal
+            }
+            window.speechSynthesis.speak(utter);
+        }
+
+        // --- 2. GAME LOGIC ---
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
         const setup = document.getElementById('setup-layer');
         const hud = document.getElementById('stats-hud');
         const led = document.getElementById('led-indicator');
 
-        let gameState = { player: "", scoreP: 0, scoreAI: 0, mood: "", difficulty: 1 };
-        let ball = { x: 0, y: 0, dx: 5, dy: 5, r: 12 };
+        let gameState = { player: "", scoreP: 0, scoreAI: 0, mood: "", difficulty: 1, active: false };
+        let ball = { x: 0, y: 0, dx: 0, dy: 0, r: 12 };
         let p1 = { x: 0, y: 0, r: 25 };
         let ai = { x: 0, y: 0, r: 25 };
 
         function bootGame() {
+            // Get inputs
             gameState.player = document.getElementById('pName').value || "User";
             gameState.mood = document.getElementById('mMood').value;
             gameState.difficulty = parseFloat(document.getElementById('mDiff').value);
+            gameState.active = true;
 
+            // UI Transition
             setup.style.display = 'none';
             hud.style.display = 'flex';
             canvas.style.display = 'block';
-            
+
+            // START AUDIO (Must be inside this click function)
+            if(player && player.playVideo) {
+                player.setVolume(50);
+                player.playVideo();
+            }
+
+            // Personality Intro
+            if (gameState.mood === 'joker') speak("Welcome to the circus, buddy.");
+            else if (gameState.mood === 'aggressive') speak("I will crush you.");
+            else speak("System ready. Good luck.");
+
             init();
             animate();
         }
@@ -99,10 +157,16 @@
         function init() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            ball.x = canvas.width/2; ball.y = canvas.height/2;
+            resetBall();
             p1.x = canvas.width/2; p1.y = canvas.height - 100;
             ai.x = canvas.width/2; ai.y = 100;
             updateHUD();
+        }
+
+        function resetBall() {
+            ball.x = canvas.width/2; ball.y = canvas.height/2;
+            ball.dx = (Math.random() > 0.5 ? 1 : -1) * (4 + Math.random() * 2);
+            ball.dy = (Math.random() > 0.5 ? 1 : -1) * (4 + Math.random() * 2);
         }
 
         function updateHUD() {
@@ -111,61 +175,11 @@
         }
 
         function animate() {
-            ctx.fillStyle = "rgba(10, 10, 10, 0.2)"; 
+            if(!gameState.active) return;
+
+            // Clear & Trail Effect
+            ctx.fillStyle = "rgba(10, 10, 10, 0.3)"; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+            // Ball Physics
             ball.x += ball.dx; ball.y += ball.dy;
-            if(ball.x < 0 || ball.x > canvas.width) ball.dx *= -1;
-
-            // AI Logic
-            let target = ball.x;
-            if(gameState.mood === 'joker' && Math.random() < 0.1) target = Math.random() * canvas.width;
-            let speedFactor = gameState.mood === 'angry' ? 0.25 : 0.15;
-            ai.x += (target - ai.x) * speedFactor * (gameState.difficulty/2);
-
-            // Collisions
-            if(Math.hypot(ball.x - p1.x, ball.y - p1.y) < ball.r + p1.r) ball.dy = -Math.abs(ball.dy) * 1.05;
-            if(Math.hypot(ball.x - ai.x, ball.y - ai.y) < ball.r + ai.r) ball.dy = Math.abs(ball.dy) * 1.05;
-
-            // Goal Detection
-            if(ball.y < 0) score('P');
-            if(ball.y > canvas.height) score('AI');
-
-            draw();
-            requestAnimationFrame(animate);
-        }
-
-        function score(who) {
-            if(who === 'P') { gameState.scoreP++; triggerLED("cyan"); }
-            else { gameState.scoreAI++; triggerLED("red"); }
-            updateHUD();
-            ball.x = canvas.width/2; ball.y = canvas.height/2;
-            ball.dy = who === 'P' ? 5 : -5;
-        }
-
-        function triggerLED(color) {
-            led.style.background = color;
-            setTimeout(() => led.style.background = "transparent", 400);
-        }
-
-        function draw() {
-            ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2);
-            ctx.fillStyle = "white"; ctx.fill(); ctx.closePath();
-
-            drawPaddle(p1.x, p1.y, "cyan");
-            drawPaddle(ai.x, ai.y, "orange");
-        }
-
-        function drawPaddle(x, y, col) {
-            ctx.beginPath(); ctx.arc(x, y, 25, 0, Math.PI*2);
-            ctx.fillStyle = col; ctx.fill(); ctx.closePath();
-        }
-
-        window.addEventListener('touchmove', e => {
-            let t = e.touches[0];
-            p1.x = t.clientX;
-            p1.y = Math.max(canvas.height/2 + 50, t.clientY);
-        });
-    </script>
-</body>
-</html>
